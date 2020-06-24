@@ -62,7 +62,7 @@ GROUP_NAME_LIST=[
 'b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9',
 ]
 # need solved issue
-
+'''
 TABLE_LIST = [
     0, 0, 0, 0, 0, 0, 0, 0, 0,
     1, 2, 0, 0, 0, 0, 0, 8, 4,
@@ -78,19 +78,19 @@ TABLE_LIST = [
 ]
 '''
 TABLE_LIST = [
-    0, 0, 0, 2, 1, 0, 0, 0, 0,
-    0, 0, 7, 3, 0, 0, 0, 0, 0,
-    0, 5, 8, 0, 0, 0, 0, 0, 0,
+    7, 5, 0, 0, 9, 0, 0, 4, 6,
+    9, 0, 1, 0, 0, 0, 3, 0, 2,
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
 
-    4, 3, 0, 0, 0, 0, 0, 0, 0,
-    2, 0, 0, 0, 0, 0, 0, 0, 8,
-    0, 0, 0, 0, 0, 0, 0, 7, 6,
+    2, 0, 0, 6, 0, 1, 0, 0, 7,
+    0, 8, 0, 0, 0, 0, 0, 2, 0,
+    1, 0, 0, 3, 0, 8, 0, 0, 5,
 
-    0, 0, 0, 0, 0, 0, 2, 5, 0,
-    0, 0, 0, 0, 0, 7, 3, 0, 0,
-    0, 0, 0, 0, 9, 8, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0,
+    3, 0, 9, 0, 0, 0, 2, 0, 4,
+    8, 4, 0, 0, 3, 0, 0, 7, 9,
 ]
-'''
+
 class cell:
     def __init__(self):
         self.iValue = 0                                      # data
@@ -238,11 +238,22 @@ def runBackTracking(cellList, groupList, solverList, iTime, bLoopAll):
     # Record all unsolved cell
     indexList=[]
     totalLenList=[]
+
+    # Use ascending order to generate indexList and totalLenList
     for i in range(len(cellList)):
         if (cellList[i].iValue == 0):
-            indexList.append(i)
-            totalLenList.append(len(cellList[i].possibilityList))
+            bInsert = False
+            for j in range(len(totalLenList)) :
+                if (len(cellList[i].possibilityList)<totalLenList[j]):
+                    indexList.insert(j,i)
+                    totalLenList.insert(j, len(cellList[i].possibilityList))
+                    bInsert = True
+                    break
+            if(bInsert == False):
+                indexList.append(i)
+                totalLenList.append(len(cellList[i].possibilityList))
 
+    # Prepare totalLenList for progress indicator
     l = len(totalLenList)
     for i in range(l-1,-1,-1):
         if( i < l-1):
