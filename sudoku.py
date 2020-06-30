@@ -1,9 +1,12 @@
 #!/usr/bin/python
 # Filename : sudoku.py
+# TODO need read from file and try to finish all current 100 cases
+
 import sys
 import os
 import copy
 import time
+from enum import Enum
 
 os.system("") # unkown reason, use this then later CSI color control can take effect in windows
 
@@ -62,21 +65,7 @@ GROUP_NAME_LIST=[
 'b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9',
 ]
 # need solved issue
-'''
-TABLE_LIST = [
-    0, 0, 0, 0, 0, 0, 0, 0, 0,
-    1, 2, 0, 0, 0, 0, 0, 8, 4,
-    0, 3, 0, 0, 0, 0, 0, 7, 0,
 
-    0, 0, 4, 0, 0, 0, 6, 0, 0,
-    0, 0, 0, 2, 0, 3, 0, 0, 0,
-    0, 0, 5, 0, 0, 0, 9, 0, 0,
-
-    0, 0, 6, 0, 9, 0, 5, 0, 0,
-    0, 7, 0, 0, 0, 0, 0, 2, 0,
-    0, 0, 0, 0, 5, 0, 0, 0, 0,
-]
-'''
 TABLE_LIST = [
     7, 5, 0, 0, 9, 0, 0, 4, 6,
     9, 0, 1, 0, 0, 0, 3, 0, 2,
@@ -90,6 +79,26 @@ TABLE_LIST = [
     3, 0, 9, 0, 0, 0, 2, 0, 4,
     8, 4, 0, 0, 3, 0, 0, 7, 9,
 ]
+'''
+TABLE_LIST = [
+    0, 0, 5, 3, 0, 0, 0, 0, 0,
+    8, 0, 0, 0, 0, 0, 0, 2, 0,
+    0, 7, 0, 0, 1, 0, 5, 0, 0,
+
+    4, 0, 0, 0, 0, 5, 3, 0, 0,
+    0, 1, 0, 0, 7, 0, 0, 0, 6,
+    0, 0, 3, 2, 0, 0, 0, 8, 0,
+
+    0, 6, 0, 5, 0, 0, 0, 0, 9,
+    0, 0, 4, 0, 0, 0, 0, 3, 0,
+    0, 0, 0, 0, 0, 9, 7, 0, 0,
+]
+'''
+class STATE(Enum):
+    NONE      = 0   # not sure
+    DEDUCTION = 1   # pure deduction
+    GUESS     = 2   # pure guess
+    MIXED     = 3   # it is deduction itself but previous result is based on guess
 
 class cell:
     def __init__(self):
@@ -97,16 +106,13 @@ class cell:
         self.possibilityList = [n for n in range(1, SIZE+1)] # possible value
         self.groupIndexList = []                             # GroupList index
         self.iTime = 0xFFFFFFFF                              # solved iTime
+        self.state = STATE.NONE                              # initial state
+        self.strSolve = ''                                   # solve description
 
 class group:
     def __init__(self):
         self.cellList = []   # one group is a cell list
         self.strName = ''     # group name
-
-class solver:
-    def __init__(self):
-        self.strDesc = ''
-        self.iTime = 0xFFFFFFFF                              # solved iTime
 
 def initCellList(groupList):
     cellList = []
@@ -155,7 +161,7 @@ def loadCellList(cellList):
             cellList[i].possibilityList = [answer]
             cellList[i].iTime  = 0  # 0 iTime means solved when init.
 
-def removePossibility(cellList, groupList, solverList):
+def removePossibility(cellList, groupList):
     bUpdate = False
     for i in range(len(cellList)):
         value = cellList[i].iValue
@@ -168,7 +174,7 @@ def removePossibility(cellList, groupList, solverList):
                             bUpdate = True
     return bUpdate
 
-def markNakedSingle(cellList, groupList, solverList, iTime):
+def markNakedSingle(cellList, groupList, iTime, bPureDeduction):
     bUpdate = False
     # When a cell is only have one possibility, then its value is done.
     for i in range(len(cellList)):
@@ -176,16 +182,17 @@ def markNakedSingle(cellList, groupList, solverList, iTime):
             value = cellList[i].possibilityList[0]
             cellList[i].iValue = value
             cellList[i].iTime = iTime
+            cellList[i].state = STATE.DEDUCTION if (bPureDeduction == True) else STATE.MIXED
+            cellList[i].strSolve ='r{0:d}c{1:d} = {2:d} as naked single'.format(int(i/SIZE)+1,int(i%SIZE)+1, value)
 
-            s = solver()
-            s.iTime = iTime
-            s.strDesc = 'r{0:d}c{1:d} = {2:d} as naked single'.format(int(i/SIZE)+1,int(i%SIZE)+1, value)
-            solverList.append(s)
+            # Since it is based on guess, we need update possibilities every time to find no answer immediately
+            if (bPureDeduction == False):
+                removePossibility(cellList, groupList)
 
             bUpdate = True
     return bUpdate
 
-def markHiddenSingle(cellList, groupList, solverList, iTime):
+def markHiddenSingle(cellList, groupList, iTime, bPureDeduction):
     bUpdate = False
     # For specific value, when a group only has one cell that own this value's possibility,
     # Then this cell's value is done with this specific value.
@@ -203,12 +210,12 @@ def markHiddenSingle(cellList, groupList, solverList, iTime):
                 cellList[lastIndex].iValue = v
                 cellList[lastIndex].iTime = iTime
                 cellList[lastIndex].possibilityList = [v]
-
-                s = solver()
-                s.iTime = iTime
-                s.strDesc = 'r{0:d}c{1:d} = {2:d} as hidden single of {3}'\
-                            .format(int(lastIndex / SIZE) + 1, int(lastIndex % SIZE) + 1, v, l.strName)
-                solverList.append(s)
+                cellList[lastIndex].state = STATE.DEDUCTION if (bPureDeduction == True) else STATE.MIXED
+                cellList[lastIndex].strSolve = 'r{0:d}c{1:d} = {2:d} as hidden single of {3}' \
+                                              .format(int(lastIndex / SIZE) + 1, int(lastIndex % SIZE) + 1, v, l.strName)
+                # Since it is based on guess, we need update possibilities every time to find no answer immediately
+                if (bPureDeduction == False):
+                    removePossibility(cellList, groupList)
 
                 bUpdate = True
 
@@ -223,7 +230,7 @@ def checkSolved(cellList):
 
     return bSolved
 
-def checkValid(cellList):
+def checkValid(cellList, groupList):
     bValid = True
     for cell in cellList:
         if (cell.iValue == 0 and len(cell.possibilityList) == 0):
@@ -231,7 +238,26 @@ def checkValid(cellList):
             break
     return bValid
 
-def runBackTracking(cellList, groupList, solverList, iTime, bLoopAll):
+def checkNoDuplicate(cellList, groupList ):
+    strError=''
+    bNoDuplicate = True
+
+    for group in groupList:
+        countList = [0] * (SIZE+1)
+        for i in group.cellList:
+            if (cellList[i].iValue !=0):
+                j = cellList[i].iValue
+                countList[j] += 1
+                if(countList[j]>1):
+                    strError = 'Invalid case! Group {0} has multiple value {1:d} '.format(group.strName, j)
+                    bNoDuplicate = False
+                    break
+        if (bNoDuplicate == False):
+            break
+
+    return strError
+
+def solveByBackTraking(cellList, groupList, iTime, bLoopAll):
     print('Use back tracking to force search the answer.')
     baseTime = time.time()
 
@@ -268,22 +294,46 @@ def runBackTracking(cellList, groupList, solverList, iTime, bLoopAll):
     iAnswerNum = 0
     answerCellLists = []
     oldcellList = cellList * len(indexList)
+    oldtimeList = [0] * len(indexList)
+
+    # backup first old cellList
+    oldcellList[0] = copy.deepcopy(cellList)
+    oldtimeList[0] = iTime
 
     while (bTraversed == False):
         i = indexList[currentIdx]
         j = currentList[currentIdx]
 
-        oldcellList[currentIdx]=copy.deepcopy(cellList)  # backup old cellList
         value = cellList[i].possibilityList[j]
         cellList[i].iValue = value
         cellList[i].iTime = iTime
         cellList[i].possibilityList = [value]
+        cellList[i].strSolve = 'r{0:d}c{1:d} = {2:d} by\033[1;31m guess\033[0m '\
+                                .format(int(i / SIZE) + 1, int(i % SIZE) + 1, value)
+        removePossibility(cellList, groupList)
 
-        removePossibility(cellList, groupList, solverList)
-        bValid = checkValid(cellList)
+        bUpdated = True
+        while (bUpdated) :
+            bUpdated = solveByDeduction(cellList, groupList, iTime, False)
+
+        bValid = checkValid(cellList, groupList)
 
         if (bValid) :
-            currentIdx += 1
+            iTime += 1
+            while True :
+                currentIdx += 1
+                if(currentIdx >= len(indexList)):
+                    break
+
+                # backup old cellList
+                oldcellList[currentIdx] = copy.deepcopy(cellList)
+                oldtimeList[currentIdx] = iTime
+
+                i = indexList[currentIdx]
+                if (cellList[i].iValue == 0):
+                    cellList[i].state = STATE.GUESS
+                    break
+
             if(currentIdx >= len(indexList)):
                 if(iAnswerNum==0):
                     print('The 1st answer is founded.')
@@ -299,10 +349,18 @@ def runBackTracking(cellList, groupList, solverList, iTime, bLoopAll):
             bContinue = False   # Reset bContinue
             bBackward = True
             while(bBackward):
+                # restore old cellList
                 cellList = copy.deepcopy(oldcellList[currentIdx])
+                iTime = oldtimeList[currentIdx]
+
                 i = indexList[currentIdx]
                 currentList[currentIdx] += 1
-                if (currentList[currentIdx] >= len(cellList[i].possibilityList)):
+                # when try next possibility, if meet any of following 2 conditions,
+                # we need reset its state and go back further.
+                # 1, Have tried all possibilities of that cell.
+                # 2, This cell state is based on deduction, but one of its dependant cell state is by guess.
+                if (currentList[currentIdx] >= len(cellList[i].possibilityList) or cellList[i].state == STATE.MIXED):
+                    cellList[i].state = STATE.NONE
                     currentList[currentIdx] = 0
                     currentIdx -= 1
                     if (currentIdx<0):
@@ -333,7 +391,7 @@ def runBackTracking(cellList, groupList, solverList, iTime, bLoopAll):
     return answerCellLists
 
 MAX_TIME=0xFFFFFFFF
-def printCellList(cellList, solverList, bSolved, bStep,i):
+def printCellList(cellList, bSolved, bStep,i):
     if (bSolved):
         print('OK! It is solved. This is answer %d.' % i)
     else:
@@ -348,9 +406,9 @@ def printCellList(cellList, solverList, bSolved, bStep,i):
     while ( needPrint ) :
 
         if bStep == True:
-            needPrint = False
             print('Time = %d ' % iTime)
 
+        needPrint = False
         for i in range(len(cellList)):
             if (cellList[i].iValue != 0):
                 if (cellList[i].iTime == iTime):
@@ -368,55 +426,61 @@ def printCellList(cellList, solverList, bSolved, bStep,i):
                 print('') # new line
 
         if bStep == True:
-            for s in solverList:
-                if (s.iTime == iTime):
-                    print(s.strDesc)
+            for i in range(len(cellList)):
+                if (cellList[i].iTime == iTime and cellList[i].strSolve !=''):
+                    print(cellList[i].strSolve)
             print('')
             iTime += 1
-        else:
-            needPrint = False
 
     return
 
+def solveByDeduction(cellList, groupList, iTime, bPureDeduction):
+    bUpdated = False
+    # Rule 1
+    bResult = removePossibility(cellList, groupList)
+    bUpdated = bUpdated or bResult
+
+    # Rule 2
+    bResult = markNakedSingle(cellList, groupList, iTime, bPureDeduction)
+    bUpdated = bUpdated or bResult
+
+    # Rule 3, mark hidden single cell
+    bResult = markHiddenSingle(cellList, groupList, iTime, bPureDeduction)
+    bUpdated = bUpdated or bResult
+
+    return bUpdated
+
 def main():
     answerCellLists = []
-    solverList = []
     groupList = initGroupList()
     cellList = initCellList(groupList)
     loadCellList(cellList)
 
-    iTime = 1
-    bSolved = False
-    bUpdated = True
-    while ((bSolved != True) and bUpdated)  :
-        bUpdated = False
+    strError = checkNoDuplicate(cellList, groupList)
+    if(strError!=''):
+        print(strError)
+    else :
+        iTime = 1
+        bSolved = False
+        bUpdated = True
+        while ((bSolved != True) and bUpdated)  :
 
-        # Rule 1
-        bResult  = removePossibility(cellList, groupList, solverList)
-        bUpdated = bUpdated or bResult
+            bUpdated = solveByDeduction(cellList, groupList, iTime, True)
 
-        # Rule 2
-        bResult  = markNakedSingle(cellList, groupList, solverList, iTime)
-        bUpdated = bUpdated or bResult
+            bSolved = checkSolved(cellList)
+            if (bUpdated) :
+                iTime +=1
 
-        # Rule 3, mark hidden single cell
-        bResult  = markHiddenSingle(cellList, groupList, solverList, iTime)
-        bUpdated = bUpdated or bResult
+        if (bSolved == True) :
+            answerCellLists.append(cellList)
+        else :
+            bLoopAll = True
+            answerCellLists = solveByBackTraking(cellList, groupList, iTime, bLoopAll)
 
-        bSolved = checkSolved(cellList)
-        if (bUpdated) :
-            iTime +=1
-
-    if (bSolved == True) :
-        answerCellLists.append(cellList)
-    else:
-        bLoopAll = True
-        answerCellLists = runBackTracking(cellList, groupList, solverList, iTime, bLoopAll)
-
-    bStep = True
-    for i in range(len(answerCellLists)):
-        bSolved = checkSolved(answerCellLists[i])
-        printCellList(answerCellLists[i], solverList, bSolved, bStep, i)
+        bStep = True
+        for i in range(len(answerCellLists)):
+            bSolved = checkSolved(answerCellLists[i])
+            printCellList(answerCellLists[i], bSolved, bStep, i)
     return
 
 if __name__ == '__main__':
