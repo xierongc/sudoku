@@ -4,6 +4,7 @@
 
 import sys
 import os
+import getopt
 import copy
 import time
 from enum import Enum
@@ -100,6 +101,10 @@ class STATE(Enum):
     GUESS     = 2   # pure guess
     MIXED     = 3   # it is deduction itself but previous result is based on guess
 
+class PARSE(Enum):
+    NAME      = 0   # parsing name
+    CELL      = 1   # parsing cells
+
 class cell:
     def __init__(self):
         self.iValue = 0                                      # data
@@ -112,7 +117,7 @@ class cell:
 class group:
     def __init__(self):
         self.cellList = []   # one group is a cell list
-        self.strName = ''     # group name
+        self.strName = ''    # group name
 
 def initCellList(groupList):
     cellList = []
@@ -153,10 +158,10 @@ def initGroupList():
 
     return groupList
 
-def loadCellList(cellList):
+def loadCellList(cellList, tableList):
     for i in range(len(cellList)):
-        if(TABLE_LIST[i] != 0 ) :
-            answer = TABLE_LIST[i]
+        if(tableList[i] != 0 ) :
+            answer = tableList[i]
             cellList[i].iValue = answer
             cellList[i].possibilityList = [answer]
             cellList[i].iTime  = 0  # 0 iTime means solved when init.
@@ -450,15 +455,15 @@ def solveByDeduction(cellList, groupList, iTime, bPureDeduction):
 
     return bUpdated
 
-def main():
+def solveOneCellList(numList, strname):
     answerCellLists = []
     groupList = initGroupList()
     cellList = initCellList(groupList)
-    loadCellList(cellList)
+    loadCellList(cellList, numList)
 
     strError = checkNoDuplicate(cellList, groupList)
     if(strError!=''):
-        print(strError)
+        print('['+strname+']'+strError)
     else :
         iTime = 1
         bSolved = False
@@ -477,11 +482,69 @@ def main():
             bLoopAll = True
             answerCellLists = solveByBackTraking(cellList, groupList, iTime, bLoopAll)
 
+        print('['+strname+'] is solving')
         bStep = True
         for i in range(len(answerCellLists)):
             bSolved = checkSolved(answerCellLists[i])
             printCellList(answerCellLists[i], bSolved, bStep, i)
     return
 
+def readCellLists(input_file, tableLists, strnames):
+    file_object = open(input_file, 'r')
+    state = PARSE.NAME
+    try:
+        for line in file_object:
+            if (state == PARSE.NAME):
+                s = line.find('[')
+                e = line.find(']', s)
+                if (s != -1 and e != -1):
+                    strnames.append(copy.deepcopy(line[s+1:e]))
+                    state = PARSE.CELL
+                    tableList = []
+            elif (state == PARSE.CELL):
+                new_str = ''
+                for ch in line:
+                    if ch.isdigit():
+                        new_str += ch
+                    else:
+                        new_str += " "
+                sub_list = new_str.split()
+                for sub_str in sub_list:
+                    tableList.append(eval(sub_str))
+                if (len(tableList)>= SIZE*SIZE):
+                    state = PARSE.NAME
+                    tableLists.append(copy.deepcopy(tableList[:SIZE*SIZE]))
+                    if (len(tableList)> SIZE*SIZE):
+                        print('{0} input number is {1:d} > {2:d}'\
+                              .format(strnames[-1], len(tableList), SIZE*SIZE))
+    finally:
+        if (len(strnames) > len(tableLists)):
+            strnames = strnames[:len(tableLists)]
+        elif (len(strnames) < len(tableLists)):
+            tableLists = tableLists[:len(strnames)]
+
+        file_object.close()
+    return
+
+def main():
+    opts, args = getopt.getopt(sys.argv[1:], 'hi:o:')
+    input_file = ''
+
+    for op, value in opts:
+        if op == '-i':
+            input_file = value
+
+    if (input_file == ''):
+        tableList = TABLE_LIST
+        strname   = "Default"
+        solveOneCellList(tableList, strname)
+    else :
+        tableLists = []
+        strnames = []
+        readCellLists(input_file, tableLists, strnames)
+        for i in range(len(tableLists)):
+            solveOneCellList(tableLists[i], strnames[i])
+
+    return
 if __name__ == '__main__':
     sys.exit(main())
