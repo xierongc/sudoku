@@ -455,7 +455,7 @@ def solveByDeduction(cellList, groupList, iTime, bPureDeduction):
 
     return bUpdated
 
-def solveOneCellList(numList, strname):
+def solveOneCellList(numList, strname, bStep):
     answerCellLists = []
     groupList = initGroupList()
     cellList = initCellList(groupList)
@@ -465,6 +465,7 @@ def solveOneCellList(numList, strname):
     if(strError!=''):
         print('['+strname+']'+strError)
     else :
+        print('['+strname+'] is solving')
         iTime = 1
         bSolved = False
         bUpdated = True
@@ -482,8 +483,6 @@ def solveOneCellList(numList, strname):
             bLoopAll = True
             answerCellLists = solveByBackTraking(cellList, groupList, iTime, bLoopAll)
 
-        print('['+strname+'] is solving')
-        bStep = True
         for i in range(len(answerCellLists)):
             bSolved = checkSolved(answerCellLists[i])
             printCellList(answerCellLists[i], bSolved, bStep, i)
@@ -527,23 +526,26 @@ def readCellLists(input_file, tableLists, strnames):
     return
 
 def main():
-    opts, args = getopt.getopt(sys.argv[1:], 'hi:o:')
+    opts, args = getopt.getopt(sys.argv[1:], 'i:v:')
     input_file = ''
 
+    bStep = True
     for op, value in opts:
         if op == '-i':
             input_file = value
+        elif op == '-v':
+            bStep = (int(value)!=0)
 
     if (input_file == ''):
         tableList = TABLE_LIST
         strname   = "Default"
-        solveOneCellList(tableList, strname)
+        solveOneCellList(tableList, strname, bStep)
     else :
         tableLists = []
         strnames = []
         readCellLists(input_file, tableLists, strnames)
         for i in range(len(tableLists)):
-            solveOneCellList(tableLists[i], strnames[i])
+            solveOneCellList(tableLists[i], strnames[i], bStep)
 
     return
 if __name__ == '__main__':
